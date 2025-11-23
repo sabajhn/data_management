@@ -4,110 +4,95 @@ import ast
 import os
 
 # Define the relative path to the movies metadata CSV
+# Ensure your CSV file is inside a folder named 'data'
 CSV_PATH = os.path.join("data", "movies_metadata.csv")
 
-def load_data(path: str) -> pd.DataFrame or None:
+def load_data(path: str) -> pd.DataFrame:
     """
-    Loads the movie metadata CSV file.
-
-    Args:
-        path (str): The full file path to the movies_metadata.csv file.
-
-    Returns:
-        pd.DataFrame or None: The loaded DataFrame, or None if loading fails.
+    Loads the movie metadata CSV file with specific columns to save memory.
     """
     print(f"Loading data from: {path}...")
     try:
-        # low_memory=False is necessary for this particular Kaggle dataset 
-        # due to mixed data types in some columns.
-        df = pd.read_csv(path, low_memory=False)
-        print("Data loaded successfully.")
+        # Columns we actually need for the analysis
+        cols_to_use = [
+            'id', 'title', 'budget', 'revenue', 'release_date', 
+            'genres', 'production_companies', 'runtime', 
+            'vote_average', 'vote_count', 'popularity'
+        ]
+        
+        # low_memory=False helps with mixed types in the raw Kaggle dataset
+        df = pd.read_csv(path, usecols=cols_to_use, low_memory=False)
+        print(f"Data loaded successfully: {len(df)} rows.")
         return df
     except FileNotFoundError:
-        print(f"Error: File not found at {path}. Please check your file path and organization.")
+        print(f"Error: File not found at {path}.")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred during file loading: {e}")
+        print(f"An unexpected error occurred: {e}")
         return None
+
+def safe_parse_json(x):
+    """
+    Safely evaluates a string containing a Python literal (like a list of dicts).
+    Returns an empty list if parsing fails.
+    """
+    try:
+        # If it's already a list (rare but possible depending on pandas version/loading), return it
+        if isinstance(x, list):
+            return x
+        # If it's NaN or empty string
+        if pd.isna(x) or x == '':
+            return []
+        # Safely evaluate the string
+        return ast.literal_eval(x)
+    except (ValueError, SyntaxError):
+        return []
 
 def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Cleans, transforms, and prepares the DataFrame for analysis.
-
-    This includes handling stringified JSON, converting data types,
-    and calculating key financial metrics.
-
-    Args:
-        df (pd.DataFrame): The raw DataFrame.
-
-    Returns:
-        pd.DataFrame: The cleaned and processed DataFrame.
+    Cleans the raw DataFrame:
+    1. Parses JSON columns (genres, companies).
+    2. Converts types (dates, numbers).
+    3. Calculates Profit and ROI.
+    4. Filters out invalid rows.
     """
     print("Starting data preprocessing...")
-
-    # --- 1. JSON Parsing and Feature Extraction ---
     
-    # Define a safe function to extract the first 'name' from stringified JSON lists
-    def extract_name(json_str: str, key='name') -> str or np.nan:
-        """Extracts the first 'name' value from a stringified JSON list of objects."""
-        if pd.isna(json_str):
-            return np.nan
-        try:
-            # Use ast.literal_eval for safe evaluation of stringified lists/dicts
-            list_of_dicts = ast.literal_eval(json_str)
-            if list_of_dicts and isinstance(list_of_dicts, list):
-                # Return the 'name' of the first element
-                return list_of_dicts[0].get(key)
-            return np.nan
-        except (ValueError, SyntaxError):
-            # Handle malformed strings, which are present in this dataset
-            return np.nan
-
-    # Apply parsing to complex columns
-    df['primary_genre'] = df['genres'].apply(lambda x: extract_name(x, 'name'))
-    df['production_company'] = df['production_companies'].apply(lambda x: extract_name(x, 'name'))
-    df['is_collection'] = df['belongs_to_collection'].apply(lambda x: pd.notna(x))
-
-    # --- 2. Data Type Conversions and Cleaning ---
-
-    # Convert financial columns to numeric, coercing errors
+    # --- 1. Parse JSON Columns ---
+    # Extract genre names from the list of dictionaries
+    # e.g., "[{'id': 1, 'name': 'Comedy'}]" -> "Comedy"
+    print("Parsing JSON columns...")
+    df['genres_list'] = df['genres'].apply(safe_parse_json)
+    df['primary_genre'] = df['genres_list'].apply(lambda x: x[0]['name'] if len(x) > 0 else np.nan)
+    
+    # --- 2. Numeric Conversions ---
+    # Force numeric types, turning errors (like string '0') into numbers or NaN
     df['budget'] = pd.to_numeric(df['budget'], errors='coerce')
     df['revenue'] = pd.to_numeric(df['revenue'], errors='coerce')
+    df['runtime'] = pd.to_numeric(df['runtime'], errors='coerce')
+    df['vote_count'] = pd.to_numeric(df['vote_count'], errors='coerce')
+    df['vote_average'] = pd.to_numeric(df['vote_average'], errors='coerce')
     
-    # Handle zero/missing values in financial columns for analysis
-    # Zero budget/revenue often means missing data, so replace with NaN for clean calculation
-    df.loc[df['budget'] == 0, 'budget'] = np.nan
-    df.loc[df['revenue'] == 0, 'revenue'] = np.nan
-    
-    # Convert release_date to datetime and extract year
+    # Handle 0 values in budget/revenue (common in this dataset)
+    # We replace 0 with NaN so they don't skew averages, then drop them later for financial analysis
+    df['budget'] = df['budget'].replace(0, np.nan)
+    df['revenue'] = df['revenue'].replace(0, np.nan)
+
+    # --- 3. Date Handling ---
     df['release_date'] = pd.to_datetime(df['release_date'], errors='coerce')
     df['year'] = df['release_date'].dt.year
 
-    # Convert vote_average and vote_count to numeric
-    df['vote_average'] = pd.to_numeric(df['vote_average'], errors='coerce')
-    df['vote_count'] = pd.to_numeric(df['vote_count'], errors='coerce')
-    df['runtime'] = pd.to_numeric(df['runtime'], errors='coerce')
-
-    # --- 3. Feature Engineering (Scientific Computing/Data Manipulation) ---
-
-    # Calculate Profit
+    # --- 4. Feature Engineering ---
+    # Profit = Revenue - Budget
     df['profit'] = df['revenue'] - df['budget']
-
-    # Calculate Return on Investment (ROI)
+    
     # ROI = Profit / Budget
-    # Use .where() to avoid division by zero (or NaN budget)
-    df['roi'] = (df['profit'] / df['budget']).where(df['budget'].notna(), np.nan)
+    df['roi'] = df['profit'] / df['budget']
 
-    print("Preprocessing complete. Relevant columns cleaned and new features created.")
+    # --- 5. Filtering ---
+    # Keep only rows that have valid financial data and a genre for our main analysis
+    df_clean = df.dropna(subset=['budget', 'revenue', 'primary_genre', 'year'])
     
-    # Select only the relevant columns for the final analysis DataFrame
-    final_cols = [
-        'id', 'title', 'year', 'primary_genre', 'budget', 'revenue', 'profit', 'roi',
-        'runtime', 'popularity', 'vote_average', 'vote_count', 'is_collection', 'status'
-    ]
+    print(f"Preprocessing complete. {len(df_clean)} entries remain after cleaning.")
     
-    # Filter the DataFrame to keep only movies with valid financial and genre data
-    df_cleaned = df.dropna(subset=['primary_genre', 'budget', 'revenue', 'vote_count', 'vote_average', 'year'])
-    
-    # Only keep the final columns (this drops the original 'genres', 'belongs_to_collection', etc.)
-    return df_cleaned[final_cols]
+    return df_clean
