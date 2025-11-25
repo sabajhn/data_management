@@ -1,151 +1,131 @@
 """
 Module: visualize.py
-Description: Encapsulates plot generation and saving within the MovieVisualizer class.
+Description: Generates matplotlib/seaborn figures for the Streamlit app.
 """
 
-import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
 
-# Configuration Constant
-RESULTS_DIR = "results"
-
 class MovieVisualizer:
     """
-    Generates and saves analytical plots using Matplotlib and Seaborn.
+    Creates visualizations for the analysis.
     """
     def __init__(self):
-        """Initializes the visualizer and ensures the results directory exists."""
-        self.results_dir = RESULTS_DIR
-        os.makedirs(self.results_dir, exist_ok=True)
-        sns.set_theme(style="whitegrid") # Set style once
-        print(f"[INFO] Visualizations will be saved to: {self.results_dir}")
-
-    def save_plot(self, filename: str):
-        """Helper function to save and close plots."""
-        path = os.path.join(self.results_dir, filename)
-        plt.tight_layout()
-        plt.savefig(path, dpi=300) 
-        plt.close()
-        print(f"[PLOT] Saved: {path}")
+        # Set a global theme for all plots
+        sns.set_theme(style="whitegrid")
 
     def plot_genre_roi(self, genre_df: pd.DataFrame):
-        """Generates a bar chart for Median ROI by Genre."""
-        plt.figure(figsize=(12, 6))
+        """Returns a bar chart figure for Median ROI by Genre."""
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
         sns.barplot(
             data=genre_df.head(10), 
             x='primary_genre', 
             y='median_roi', 
             palette='viridis', 
             hue='primary_genre', 
-            legend=False
+            legend=False,
+            ax=ax
         )
-        plt.title('Top 10 Genres by Median ROI (Return on Investment)', fontsize=14)
-        plt.xlabel('Genre', fontsize=12)
-        plt.ylabel('Median ROI', fontsize=12)
+        ax.set_title('Top 10 Genres by Return on Investment (ROI)', fontsize=14)
+        ax.set_xlabel('Genre', fontsize=12)
+        ax.set_ylabel('Median ROI (Profit/Budget)', fontsize=12)
         plt.xticks(rotation=45)
-        self.save_plot('genre_roi.png')
+        return fig
 
     def plot_budget_vs_revenue(self, df: pd.DataFrame):
-        """Generates a regression plot for Budget vs. Revenue."""
-        plt.figure(figsize=(10, 6))
+        """Returns a scatter plot figure with regression line."""
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
         sns.regplot(
             data=df, 
             x='budget', 
             y='revenue', 
             scatter_kws={'alpha': 0.3, 's': 10}, 
-            line_kws={'color': 'red'}
+            line_kws={'color': 'red'},
+            ax=ax
         )
-        plt.title('Correlation: Budget vs. Revenue (Log Scale)', fontsize=14)
-        plt.xlabel('Budget (USD, Log Scale)', fontsize=12)
-        plt.ylabel('Revenue (USD, Log Scale)', fontsize=12)
-        plt.xscale('log')
-        plt.yscale('log')
-        self.save_plot('budget_vs_revenue.png')
+        ax.set_title('Correlation: Budget vs. Revenue (Log Scale)', fontsize=14)
+        ax.set_xlabel('Budget (USD)', fontsize=12)
+        ax.set_ylabel('Revenue (USD)', fontsize=12)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        return fig
 
     def plot_yearly_trends(self, yearly_df: pd.DataFrame):
-        """Generates a line chart for budget trends over time."""
-        plt.figure(figsize=(12, 6))
+        """Returns a line chart figure for budget trends."""
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
         sns.lineplot(
             data=yearly_df, 
             x='year', 
             y='avg_budget', 
             marker='o', 
-            color='purple'
+            color='purple',
+            ax=ax
         )
-        plt.title('Trend of Average Movie Budgets (1980-Present)', fontsize=14)
-        plt.xlabel('Year', fontsize=12)
-        plt.ylabel('Average Budget (USD)', fontsize=12)
-        self.save_plot('yearly_budget_trend.png')
+        ax.set_title('Trend of Average Movie Budgets (1980-Present)', fontsize=14)
+        ax.set_xlabel('Year', fontsize=12)
+        ax.set_ylabel('Average Budget (USD)', fontsize=12)
+        return fig
 
     def plot_seasonal_revenue(self, seasonal_df: pd.DataFrame):
-        """Generates a bar chart for revenue seasonality."""
-        plt.figure(figsize=(12, 6))
+        """Returns a bar chart figure for seasonality."""
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
         sns.barplot(
             data=seasonal_df, 
             x='month', 
             y='median_revenue', 
             palette='coolwarm', 
             hue='month', 
-            legend=False
+            legend=False,
+            ax=ax
         )
-        plt.title('Seasonality: Median Revenue by Release Month', fontsize=14)
-        plt.xlabel('Month', fontsize=12)
-        plt.ylabel('Median Revenue (USD)', fontsize=12)
+        ax.set_title('Blockbuster Season: Revenue by Release Month', fontsize=14)
+        ax.set_xlabel('Month', fontsize=12)
+        ax.set_ylabel('Median Revenue (USD)', fontsize=12)
         plt.xticks(rotation=45)
-        self.save_plot('seasonal_revenue.png')
+        return fig
 
     def plot_top_studios(self, studio_df: pd.DataFrame):
-        """Generates a horizontal bar chart for top production studios."""
-        plt.figure(figsize=(12, 8))
+        """Returns a horizontal bar chart figure for top studios."""
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
         sns.barplot(
             data=studio_df, 
             y='lead_studio', 
             x='median_revenue', 
             palette='magma', 
             hue='lead_studio', 
-            legend=False
+            legend=False,
+            ax=ax
         )
-        plt.title('Top 10 Major Studios by Median Box Office Revenue', fontsize=14)
-        plt.xlabel('Median Revenue (USD)', fontsize=12)
-        plt.ylabel('Production Company', fontsize=12)
-        self.save_plot('top_studios.png')
+        ax.set_title('Top 10 Major Studios by Median Box Office', fontsize=14)
+        ax.set_xlabel('Median Revenue (USD)', fontsize=12)
+        ax.set_ylabel('Production Company', fontsize=12)
+        return fig
 
-    def plot_runtime_vs_vote(self, runtime_df: pd.DataFrame):
-        """Generates a bar chart showing average vote by runtime bin."""
-        plt.figure(figsize=(10, 6))
-        sns.barplot(
-            data=runtime_df, 
-            x='runtime_bin', 
-            y='avg_vote', 
-            palette='cividis', 
-            hue='runtime_bin', 
-            legend=False
-        )
-        plt.title('Average Rating by Movie Runtime', fontsize=14)
-        plt.xlabel('Runtime Bin (Minutes)', fontsize=12)
-        plt.ylabel('Average Vote (TMDB)', fontsize=12)
-        self.save_plot('runtime_vs_vote.png')
-        
     def plot_popularity_vs_rating(self, df: pd.DataFrame):
-        """Generates a scatter plot to show the relationship between popularity and rating."""
+        """Returns a scatter plot of Popularity vs Rating."""
+        # Log transform for better visualization
+        df_plot = df.copy()
+        df_plot['log_popularity'] = np.log1p(df_plot['popularity'])
         
-        # Calculate the log-transformed popularity column for plotting
-        df['log_popularity'] = np.log1p(df['popularity'])
-        
-        plt.figure(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(10, 6))
         sns.scatterplot(
-            data=df, 
+            data=df_plot, 
             x='log_popularity', 
             y='vote_average', 
-            hue='primary_genre', 
+            hue='primary_genre',
             alpha=0.5, 
             s=15,
-            legend=False
+            legend=False, # Legend removed for clarity in dense plots
+            ax=ax
         )
-        plt.title('Popularity vs. Critic Rating (Vote Average)', fontsize=14)
-        plt.xlabel('Log(1 + Popularity Score)', fontsize=12)
-        plt.ylabel('Vote Average (1-10)', fontsize=12)
-        self.save_plot('popularity_vs_rating.png')
+        ax.set_title('Do Popular Movies get Better Ratings?', fontsize=14)
+        ax.set_xlabel('Log(Popularity Score)', fontsize=12)
+        ax.set_ylabel('Vote Average (0-10)', fontsize=12)
+        return fig
