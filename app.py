@@ -3,191 +3,167 @@ Module: app.py
 Description: The main entry point for the Streamlit Web Application.
              It orchestrates Data Processing, Analysis, ML, and Visualization.
 """
-
+import os
 import streamlit as st
 import pandas as pd
 from MovieDataProcessor.data_cleaner import MovieDataProcessor, CSV_PATH
 from MovieAnalyzer.analysis import MovieAnalyzer
 from MovieVisualizer.visualize import MovieVisualizer 
 
-from models.model import MoviePredictor
+from models.model_regression import RevenueRegressor
+from models.model_classification import SuccessClassifier
 
-# --- Page Configuration ---
-st.set_page_config(
-    page_title="CineMetrics: Blockbuster Analytics",
-    page_icon="🎬",
-    layout="wide"
-)
+st.set_page_config(page_title="CineMetrics: Blockbuster Analytics", page_icon="🎬", layout="wide")
 
-# --- Title & Intro ---
 st.title("🎬 CineMetrics: The Blockbuster Blueprint")
-st.markdown("""
-This interactive dashboard explores the factors that determine cinematic success. 
-We analyze **45,000+ movies** to uncover trends and use **Machine Learning** to predict future hits.
-""")
+st.markdown("Analyze **45,000+ movies** with Data Mining and **High-Accuracy Machine Learning**.")
 
-# --- 1. Data Loading (Cached) ---
-@st.cache_data
-def load_and_process_data():
+# --- 1. Data Loading ---
+@st.cache_data(show_spinner="Loading data...")
+def load_data():
+    if not os.path.exists(CSV_PATH):
+        return None
     processor = MovieDataProcessor(path=CSV_PATH)
     df_raw = processor.load_data()
     df_clean = processor.preprocess_data(df_raw)
     
-    # CRITICAL FIX for Streamlit caching (TypeError: unhashable type: 'list'):
-    # Drop any temporary columns created during preprocessing that contain lists (unhashable)
-    # The columns 'genres_list' and 'companies_list' from data_cleaner are the likely culprits.
-    unhashable_cols = [col for col in df_clean.columns if df_clean[col].apply(lambda x: isinstance(x, list)).any()]
-    df_final = df_clean.drop(columns=unhashable_cols, errors='ignore')
+    # Drop unhashable list columns for Streamlit caching
+    cols_to_drop = [c for c in df_clean.columns if df_clean[c].apply(lambda x: isinstance(x, list)).any()]
+    return df_clean.drop(columns=cols_to_drop, errors='ignore')
+
+# --- 2. ML Training (Cached) ---
+@st.cache_resource(show_spinner="Training Advanced ML Models (Gradient Boosting)...")
+def train_models(df):
+    # Train Regressor
+    regressor = RevenueRegressor(df)
+    reg_metrics = regressor.train()
     
-    return df_final
+    # Train Classifier
+    classifier = SuccessClassifier(df)
+    clf_metrics = classifier.train()
+    
+    return regressor, classifier, reg_metrics, clf_metrics
 
-# --- 2. Model Training (Cached) ---
-@st.cache_resource
-def train_model(df):
-    predictor = MoviePredictor(df)
-    metrics = predictor.train()
-    return predictor, metrics
-
-# Check data existence
-import os
-if not os.path.exists(CSV_PATH):
-    st.error(f"❌ Critical Error: Dataset not found at `{CSV_PATH}`.")
+# --- Execution ---
+df = load_data()
+if df is None:
+    st.error(f"❌ Dataset not found at `{CSV_PATH}`.")
     st.info("Please create a 'data' folder and put 'movies_metadata.csv' inside it.")
     st.stop()
 
-# Execute Loading
-with st.spinner('Loading data and training AI model...'):
-    try:
-        df = load_and_process_data()
-        predictor, metrics = train_model(df)
-        st.success(f"System ready! Analyzed {len(df):,} movies. ML Model Accuracy (R²): {metrics['r2']:.2f}")
-    except Exception as e:
-        st.error(f"Error processing data: {e}")
-        st.stop()
+regressor, classifier, reg_metrics, clf_metrics = train_models(df)
+st.sidebar.success(f"ML Ready. Regressor R²: {reg_metrics['r2']:.2f} | Classifier Acc: {clf_metrics['accuracy']:.0%}")
 
-# --- Initialize Classes ---
 analyzer = MovieAnalyzer(df)
 visualizer = MovieVisualizer()
 
-# --- Sidebar Navigation ---
+# --- Navigation ---
 st.sidebar.header("Navigation")
-options = st.sidebar.radio(
-    "Choose Analysis Module:", 
-    ["Overview & Stats", "Financial Analysis", "Genre & Studio Insights", "Data Mining Deep Dive", "🔮 ML Revenue Predictor"]
-)
+options = st.sidebar.radio("Select Module:", 
+    ["Overview", "Financial Analysis", "Genre & Studio", "Data Mining", "Revenue Predictor (Reg)", "Success Classifier (Clf)"])
 
-# --- MODULE 1: Overview & Stats ---
-if options == "Overview & Stats":
+# Shared lists for UI
+genres_list = sorted(df['primary_genre'].dropna().unique())
+langs_list = sorted(df['original_language'].dropna().unique())
+# Handle case where 'en' might not be in list (rare)
+en_index = langs_list.index('en') if 'en' in langs_list else 0
+months_list = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+studios_list = sorted(df['lead_studio'].astype(str).unique())
+
+if options == "Overview":
     st.header("📊 Dataset Overview")
-    
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Movies", f"{len(df):,}")
     col2.metric("Avg Budget", f"${df['budget'].mean():,.0f}")
     col3.metric("Avg Revenue", f"${df['revenue'].mean():,.0f}")
     col4.metric("Avg ROI", f"{df['roi'].median():.2f}x")
+    st.dataframe(df.head())
+    st.markdown("### Key Correlations")
+    st.dataframe(analyzer.get_correlation_matrix().style.background_gradient(cmap="coolwarm"))
 
-    st.subheader("Raw Data Sample")
-    st.dataframe(df.head(10))
-    
-    st.subheader("Key Correlations")
-    corr_matrix = analyzer.get_correlation_matrix()
-    st.dataframe(corr_matrix.style.background_gradient(cmap="coolwarm"))
-
-# --- MODULE 2: Financial Analysis ---
 elif options == "Financial Analysis":
     st.header("💰 Financial Analysis")
-    
-    st.subheader("Budget vs. Revenue")
-    st.markdown("Does throwing money at a movie guarantee success?")
-    fig_budget = visualizer.plot_budget_vs_revenue(df)
-    st.pyplot(fig_budget)
-    
-    st.subheader("Historical Trends")
-    st.markdown("How have movie budgets changed since 1980?")
-    yearly_data = analyzer.get_yearly_trends()
-    fig_trend = visualizer.plot_yearly_trends(yearly_data)
-    st.pyplot(fig_trend)
+    st.pyplot(visualizer.plot_budget_vs_revenue(df))
+    st.pyplot(visualizer.plot_yearly_trends(analyzer.get_yearly_trends()))
 
-# --- MODULE 3: Genre & Studio Insights ---
-elif options == "Genre & Studio Insights":
+elif options == "Genre & Studio":
     st.header("🎭 Genre & Studio Analytics")
+    c1, c2 = st.columns(2)
+    with c1: st.pyplot(visualizer.plot_genre_roi(analyzer.get_genre_metrics()))
+    with c2: st.pyplot(visualizer.plot_top_studios(analyzer.get_top_studios()))
+
+elif options == "Data Mining":
+    st.header("⛏️ Data Mining Deep Dive")
+    c1, c2 = st.columns(2)
+    with c1: 
+        st.subheader("Seasonality")
+        st.pyplot(visualizer.plot_seasonal_revenue(analyzer.get_seasonal_stats()))
+    with c2:
+        st.subheader("Popularity vs Quality")
+        st.pyplot(visualizer.plot_popularity_vs_rating(df))
+    st.subheader("Runtime Sweet Spot")
+    st.table(analyzer.get_runtime_metrics().head())
+
+# --- ML MODULE 1: REGRESSION ---
+elif options == "Revenue Predictor (Reg)":
+    st.header("💰 AI Revenue Prediction")
+    st.markdown("Predict the **exact dollar amount** a movie might earn.")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Most Profitable Genres")
-        genre_data = analyzer.get_genre_metrics()
-        fig_genre = visualizer.plot_genre_roi(genre_data)
-        st.pyplot(fig_genre)
-        with st.expander("View Genre Data"):
-            st.dataframe(genre_data)
-
-    with col2:
-        st.subheader("Top Studios (Revenue)")
-        studio_data = analyzer.get_top_studios()
-        fig_studio = visualizer.plot_top_studios(studio_data)
-        st.pyplot(fig_studio)
-
-# --- MODULE 4: Data Mining Deep Dive ---
-elif options == "Data Mining Deep Dive":
-    st.header("⛏️ Data Mining: Hidden Patterns")
-    
-    st.subheader("1. The 'Blockbuster Season'")
-    st.markdown("Is there a specific month where movies make the most money?")
-    seasonal_data = analyzer.get_seasonal_stats()
-    fig_season = visualizer.plot_seasonal_revenue(seasonal_data)
-    st.pyplot(fig_season)
-    
-    st.subheader("2. Popularity vs. Quality")
-    st.markdown("Are popular movies actually rated higher by critics?")
-    fig_pop = visualizer.plot_popularity_vs_rating(df)
-    st.pyplot(fig_pop)
-    
-    st.subheader("3. The Runtime Sweet Spot")
-    st.markdown("Do audiences prefer specific movie lengths?")
-    runtime_data = analyzer.get_runtime_metrics()
-    st.table(runtime_data)
-
-# --- MODULE 5: Machine Learning (BONUS) ---
-elif options == "🔮 ML Revenue Predictor":
-    st.header("🔮 AI Revenue Prediction")
-    st.markdown("""
-    Use our trained **Random Forest Machine Learning model** to predict the Box Office Revenue for a hypothetical movie.
-    """)
-
-    col1, col2 = st.columns([1, 2])
-
-    with col1:
-        st.subheader("Movie Parameters")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        b_in = st.number_input("Budget ($)", 1000, 500000000, 10000000)
+        r_in = st.slider("Runtime (mins)", 30, 240, 120)
+        p_in = st.slider("Popularity Score", 1.0, 50.0, 10.0)
+        v_in = st.number_input("Vote Count (Hype)", 0, 15000, 1000, help="How many people rated this movie? More votes usually means more viewers.")
         
-        # User Inputs
-        budget_input = st.number_input("Budget (USD)", min_value=1000, value=10000000, step=1000000)
-        runtime_input = st.slider("Runtime (Minutes)", 30, 240, 120)
-        popularity_input = st.slider("Expected Popularity Score", 1.0, 50.0, 10.0)
+        is_fran = st.checkbox("Is part of a Franchise?", value=False)
+        is_fran_int = 1 if is_fran else 0
         
-        # Get list of unique genres from data for the dropdown
-        unique_genres = sorted(df['primary_genre'].dropna().unique())
-        genre_input = st.selectbox("Primary Genre", unique_genres)
-        
-        predict_btn = st.button("Predict Box Office Revenue", type="primary")
+        g_in = st.selectbox("Genre", genres_list)
+        l_in = st.selectbox("Language", langs_list, index=en_index)
+        m_in = st.selectbox("Release Month", months_list)
+        s_in = st.selectbox("Lead Studio", studios_list)
 
-    with col2:
-        if predict_btn:
-            prediction = predictor.predict(budget_input, runtime_input, popularity_input, genre_input)
+        if st.button("Predict Revenue"):
+            rev = regressor.predict(b_in, r_in, p_in, is_fran_int, v_in, g_in, l_in, m_in, s_in)
+            st.success(f"Predicted Revenue: **${rev:,.2f}**")
             
-            st.success(f"💰 Predicted Revenue: **${prediction:,.2f}**")
-            
-            # Simple ROI calc for the prediction
-            predicted_roi = (prediction - budget_input) / budget_input
-            if predicted_roi > 0:
-                st.metric("Estimated ROI", f"+{predicted_roi:.2f}x", delta_color="normal")
+            if is_fran: st.info("💡 Franchise movies have a significant multiplier effect.")
+
+    with c2:
+        st.subheader("Feature Importance")
+        st.markdown("Which factors contributed most to this model?")
+        st.pyplot(visualizer.plot_feature_importance(regressor.get_feature_importance()))
+
+# --- ML MODULE 2: CLASSIFICATION ---
+elif options == "Success Classifier (Clf)":
+    st.header("🏆 AI Success Classification")
+    st.markdown(f"Predict if a movie will be a **Critical Hit** (Rated > {classifier.rating_threshold:.1f}).")
+    
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        st.info("Enter details:")
+        b_cl = st.number_input("Budget ($)", 1000, 500000000, 5000000, key='b_clf')
+        r_cl = st.slider("Runtime (mins)", 30, 240, 100, key='r_clf')
+        p_cl = st.slider("Popularity", 1.0, 50.0, 5.0, key='p_clf')
+        v_cl = st.number_input("Vote Count", 0, 15000, 500, key='v_clf')
+        
+        is_fran_cl = st.checkbox("Is Franchise?", value=False, key='fran_clf')
+        is_fran_int_cl = 1 if is_fran_cl else 0
+        
+        g_cl = st.selectbox("Genre", genres_list, key='g_clf')
+        l_cl = st.selectbox("Language", langs_list, index=en_index, key='l_clf')
+        m_cl = st.selectbox("Release Month", months_list, key='m_clf')
+        s_cl = st.selectbox("Lead Studio", studios_list, key='s_clf')
+        
+        if st.button("Classify Success"):
+            prob = classifier.predict_proba(b_cl, r_cl, p_cl, is_fran_int_cl, v_cl, g_cl, l_cl, m_cl, s_cl)
+            if prob > 0.5:
+                st.balloons()
+                st.success(f"🌟 **CRITICAL HIT!** ({prob:.1%} confidence)")
             else:
-                st.metric("Estimated ROI", f"{predicted_roi:.2f}x", delta_color="inverse")
-
-        st.markdown("---")
-        st.subheader("What drives the prediction?")
-        st.markdown("The chart below shows which features the AI finds most important.")
-        
-        feature_importance = predictor.get_feature_importance()
-        if feature_importance is not None:
-            fig_imp = visualizer.plot_feature_importance(feature_importance)
-            st.pyplot(fig_imp)
+                st.warning(f"📉 **Average/Flop** ({1-prob:.1%} confidence)")
+    
+    with c2:
+        st.markdown("### Model Performance")
+        st.pyplot(visualizer.plot_confusion_matrix(clf_metrics['confusion_matrix'], classifier.rating_threshold))

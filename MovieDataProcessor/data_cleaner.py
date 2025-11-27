@@ -47,7 +47,8 @@ class MovieDataProcessor:
         cols_to_use = [
             'id', 'title', 'budget', 'revenue', 'release_date', 
             'genres', 'production_companies', 'runtime', 
-            'vote_average', 'vote_count', 'popularity'
+            'vote_average', 'vote_count', 'popularity',
+            'belongs_to_collection', 'original_language' # Added for ML features
         ]
 
         try:
@@ -76,6 +77,12 @@ class MovieDataProcessor:
             lambda x: x[0]['name'] if isinstance(x, list) and len(x) > 0 else np.nan
         )
 
+        # NEW: Franchise Feature (Big accuracy booster)
+        # Check if 'belongs_to_collection' has valid data
+        df['is_franchise'] = df['belongs_to_collection'].apply(
+            lambda x: 1 if pd.notna(x) and x != '[]' and x != '' else 0
+        )
+
         # 2. Numeric Conversion
         # Coerce errors to NaN (e.g., if budget is 'unknown')
         numeric_cols = ['budget', 'revenue', 'runtime', 'vote_count', 'vote_average', 'popularity']
@@ -97,6 +104,8 @@ class MovieDataProcessor:
 
         # 5. Filtering
         # Drop rows missing critical data for our core analysis
-        df_clean = df.dropna(subset=['budget', 'revenue', 'primary_genre', 'year', 'popularity'])
+        df_clean = df.dropna(subset=[
+            'budget', 'revenue', 'primary_genre', 'year', 'popularity', 'original_language'
+        ])
         
         return df_clean
