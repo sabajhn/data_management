@@ -36,11 +36,7 @@ The data was sourced from the following location:
 * **Data Mining:** Seasonality analysis (best month to release?) and Popularity vs. Quality checks.
 
 
-### **2. 🤖 Advanced Machine Learning**
-* **Revenue Predictor (Regression):**
-    * Uses **Gradient Boosting** to predict the _exact_ box office revenue.
-    * Inputs: Budget, Runtime, Genre, Language, etc.
-    * Visualizes **Feature Importance** to show what drives revenue.
+### **2. 🤖 Machine Learning**
 * **Success Classifier (Classification):**
     * Uses Gradient Boosting to classify a movie as a **"Hit"** (Critical Success) or **"Average/Flop"**.
     * Includes a <ins>Confusion Matrix</ins> to visualize model performance.
@@ -50,36 +46,8 @@ The data was sourced from the following location:
 * Balances their average rating with the number of votes they received.
 * Allows filtering by **Genre** (e.g., "Top 10 Horror Movies").
 
-### **4. 🔮 Prediction Analysis**
-* Visualizes the relationships that drive the Machine Learning models.
-* Includes **Scatter plots** of Features vs. Targets, Joint Distributions, and Correlation Heatmaps.
-
 ---
 
-## **Project Structure**
-The project follows a professional Object-Oriented Programming (OOP) structure for modularity and scalability.
-
-```text
-CineMetrics/
-├── data/
-│   └── data_loader.py       # Handles data loading & caching
-├── models/
-│   ├── model_regression.py  # Revenue prediction logic (Gradient Boosting)
-│   ├── model_classification.py # Success classification logic
-│   └── model_ranking.py     # Weighted Rating (Top Charts) logic
-├── plots/
-│   ├── prediction_plots.py  # Plots for ML analysis (Scatter, Joint, Heatmap)
-│   └── recommendation_plots.py # Similarity score visualization
-├── MovieAnalyzer/
-│   └── analysis.py          # Statistical aggregations (GroupBys, Trends)
-├── MovieDataProcessor/
-│   └── data_cleaner.py      # Data cleaning, JSON parsing, Feature Engineering
-├── MovieVisualizer/
-│   └── visualize.py         # Core visualization logic (Seaborn/Matplotlib)
-├── app.py                   # Main Streamlit application entry point
-├── requirements.txt         # List of dependencies
-├── .gitignore               # Files to exclude from Git
-└── README.md                # Project documentation
 
 # Setup & Installation
 
